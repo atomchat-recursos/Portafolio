@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matriz FODA Interactiva</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        
+        .foda-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .foda-section {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            min-height: 200px;
+        }
+        
+        .fortalezas {
+            background-color: #d4efdf;
+        }
+        
+        .oportunidades {
+            background-color: #d1f2eb;
+        }
+        
+        .debilidades {
+            background-color: #fadbd8;
+        }
+        
+        .amenazas {
+            background-color: #f5cba7;
+        }
+        
+        h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 1.2em;
+            border-bottom: 1px solid #aaa;
+            padding-bottom: 5px;
+        }
+        
+        ul {
+            min-height: 150px;
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        li {
+            margin-bottom: 8px;
+        }
+        
+        .input-container {
+            display: flex;
+            margin-top: 15px;
+            width: 100%;
+        }
+        
+        select, input, button {
+            padding: 8px;
+            font-size: 16px;
+        }
+        
+        select {
+            width: 150px;
+            margin-right: 10px;
+        }
+        
+        input {
+            flex-grow: 1;
+            margin-right: 10px;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        .export-section {
+            margin-top: 30px;
+            text-align: center;
+        }
+        
+        .export-btn {
+            background-color: #27ae60;
+            padding: 10px 20px;
+        }
+        
+        .export-btn:hover {
+            background-color: #219955;
+        }
+        
+        textarea {
+            width: 100%;
+            height: 150px;
+            margin-top: 10px;
+            padding: 10px;
+            font-family: Arial, sans-serif;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            resize: vertical;
+        }
+        
+        .delete-btn {
+            color: #27ae60;
+            cursor: pointer;
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Matriz FODA Interactiva</h1>
+    
+    <div class="foda-container">
+        <div class="foda-section fortalezas">
+            <h2>Fortalezas (Internas positivas)</h2>
+            <ul id="fortalezas-lista"></ul>
+        </div>
+        
+        <div class="foda-section oportunidades">
+            <h2>Oportunidades (Externas positivas)</h2>
+            <ul id="oportunidades-lista"></ul>
+        </div>
+        
+        <div class="foda-section debilidades">
+            <h2>Debilidades (Internas negativas)</h2>
+            <ul id="debilidades-lista"></ul>
+        </div>
+        
+        <div class="foda-section amenazas">
+            <h2>Amenazas (Externas negativas)</h2>
+            <ul id="amenazas-lista"></ul>
+        </div>
+    </div>
+    
+    <div class="input-container">
+        <select id="categoria-select">
+            <option value="fortalezas">Fortalezas</option>
+            <option value="oportunidades">Oportunidades</option>
+            <option value="debilidades">Debilidades</option>
+            <option value="amenazas">Amenazas</option>
+        </select>
+        <input type="text" id="nuevo-item" placeholder="Ingrese un nuevo elemento...">
+        <button id="agregar-btn">Agregar</button>
+    </div>
+    
+    <div class="export-section">
+        <button id="exportar-btn" class="export-btn">Exportar Matriz FODA</button>
+        <textarea id="resultado-texto" readonly></textarea>
+    </div>
+
+    <script>
+        // Referencias a elementos del DOM
+        const categoriaSelect = document.getElementById('categoria-select');
+        const nuevoItemInput = document.getElementById('nuevo-item');
+        const agregarBtn = document.getElementById('agregar-btn');
+        const exportarBtn = document.getElementById('exportar-btn');
+        const resultadoTexto = document.getElementById('resultado-texto');
+        
+        // Listas para cada categoría
+        const listas = {
+            fortalezas: document.getElementById('fortalezas-lista'),
+            oportunidades: document.getElementById('oportunidades-lista'),
+            debilidades: document.getElementById('debilidades-lista'),
+            amenazas: document.getElementById('amenazas-lista')
+        };
+        
+        // Función para agregar un nuevo elemento
+        function agregarItem() {
+            const categoria = categoriaSelect.value;
+            const texto = nuevoItemInput.value.trim();
+            
+            if (texto) {
+                const li = document.createElement('li');
+                li.textContent = texto;
+                
+                // Agregar botón de eliminar con check verde
+                const deleteBtn = document.createElement('span');
+                deleteBtn.innerHTML = ' &#9989;'; // Código de emoji para check verde
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.title = 'Eliminar elemento';
+                deleteBtn.onclick = function() {
+                    li.remove();
+                };
+                
+                li.appendChild(deleteBtn);
+                listas[categoria].appendChild(li);
+                
+                // Limpiar input
+                nuevoItemInput.value = '';
+                nuevoItemInput.focus();
+            }
+        }
+        
+        // Función para exportar la matriz FODA
+        function exportarFODA() {
+            let resultado = "MATRIZ FODA\n\n";
+            
+            // Fortalezas
+            resultado += "FORTALEZAS:\n";
+            const fortalezas = Array.from(listas.fortalezas.children);
+            fortalezas.forEach((item, index) => {
+                resultado += `${index + 1}. ${item.textContent.replace(' ✅', '')}\n`;
+            });
+            
+            // Oportunidades
+            resultado += "\nOPORTUNIDADES:\n";
+            const oportunidades = Array.from(listas.oportunidades.children);
+            oportunidades.forEach((item, index) => {
+                resultado += `${index + 1}. ${item.textContent.replace(' ✅', '')}\n`;
+            });
+            
+            // Debilidades
+            resultado += "\nDEBILIDADES:\n";
+            const debilidades = Array.from(listas.debilidades.children);
+            debilidades.forEach((item, index) => {
+                resultado += `${index + 1}. ${item.textContent.replace('T', '')}\n`;
+            });
+            
+            // Amenazas
+            resultado += "\nAMENAZAS:\n";
+            const amenazas = Array.from(listas.amenazas.children);
+            amenazas.forEach((item, index) => {
+                resultado += `${index + 1}. ${item.textContent.replace('T', '')}\n`;
+            });
+            
+            resultadoTexto.value = resultado;
+            resultadoTexto.select();
+        }
+        
+        // Event listeners
+        agregarBtn.addEventListener('click', agregarItem);
+        nuevoItemInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                agregarItem();
+            }
+        });
+        exportarBtn.addEventListener('click', exportarFODA);
+    </script>
+</body>
+</html>
