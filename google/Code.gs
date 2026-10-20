@@ -5,12 +5,55 @@ const ACTIVITIES = ['Conversar y tomar café', 'Salir a comer', 'Ir al cine', 'P
 const FOODS = ['Hamburguesas', 'Pizzas', 'Sopas', 'Makis', 'Otra'];
 const HEADERS = ['Solicitud', 'Huella', 'Estado', 'Registrado', 'Nombre', 'Correo', 'Inicio', 'Fin', 'Actividad', 'Lugar', 'Comida', 'Comentarios', 'Evento'];
 
+// Run manually in the Apps Script editor as the Google account owner.
+// This function is never invoked by the public HTTP endpoints.
+function inicializarAgenda() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) throw new Error('La configuración está en curso. Reintenta.');
+  try {
+    const props = PropertiesService.getScriptProperties();
+    // Verify access to the principal calendar before creating resources.
+    const primary = Calendar.Calendars.get('primary');
+    let calendarId = props.getProperty('CALENDAR_ID');
+    if (!calendarId) {
+      const calendar = Calendar.Calendars.insert({ summary: 'Entre amigos · Encuentros', description: 'Reservas del agendador Entre amigos', timeZone: TIME_ZONE });
+      calendarId = calendar.id;
+      props.setProperty('CALENDAR_ID', calendarId);
+    }
+    let spreadsheetId = props.getProperty('SPREADSHEET_ID');
+    if (!spreadsheetId) {
+      const spreadsheet = SpreadsheetApp.create('Entre amigos · Registro de citas');
+      spreadsheetId = spreadsheet.getId();
+      props.setProperty('SPREADSHEET_ID', spreadsheetId);
+    }
+    // Preserve any calendars the owner previously configured.
+    if (!props.getProperty('BUSY_CALENDAR_IDS')) {
+      props.setProperty('BUSY_CALENDAR_IDS', JSON.stringify(Array.from(new Set([primary.id, calendarId]))));
+    }
+    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    spreadsheet.setSpreadsheetTimeZone(TIME_ZONE);
+    const sheet = spreadsheet.getSheetByName('Citas') || spreadsheet.insertSheet('Citas');
+    if (sheet.getLastRow() === 0) { sheet.appendRow(HEADERS); sheet.setFrozenRows(1); }
+    SpreadsheetApp.flush();
+    const resources = {
+      calendarUrl: 'https://calendar.google.com/calendar/u/0/r',
+      spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/edit',
+      calendarId: calendarId
+    };
+    console.log(JSON.stringify(resources));
+    return resources;
+  } finally { lock.releaseLock(); }
+}
+
 function settings() {
   const p = PropertiesService.getScriptProperties();
   const calendarId = p.getProperty('CALENDAR_ID');
   const spreadsheetId = p.getProperty('SPREADSHEET_ID');
   if (!calendarId || !spreadsheetId) throw new Error('La agenda aún no está configurada. Contacta a la persona organizadora.');
-  return { calendarId: calendarId, spreadsheetId: spreadsheetId };
+  const rawBusyIds = p.getProperty('BUSY_CALENDAR_IDS');
+  const busyIds = rawBusyIds ? JSON.parse(rawBusyIds) : [calendarId];
+  if (!Array.isArray(busyIds) || busyIds.some(function (id) { return typeof id !== 'string' || !id.trim(); })) throw new Error('Invalid BUSY_CALENDAR_IDS');
+  return { calendarId: calendarId, spreadsheetId: spreadsheetId, busyCalendarIds: Array.from(new Set([calendarId].concat(busyIds))) };
 }
 function json(value) { return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON); }
 function respond(fn) {
@@ -25,7 +68,7 @@ function doGet(e) {
   return respond(function () {
     if (!e || e.parameter.action !== 'availability') fail('Solicitud no válida.');
     const config = settings();
-    return { slots: availableSlots(e.parameter.date, config.calendarId) };
+    return { slots: availableSlots(e.parameter.date, config.calendarId, config.busyCalendarIds) };
   });
 }
 function doPost(e) {
@@ -47,12 +90,16 @@ function dateWindow(date) {
   const open = day === 0 || day === 6 ? 10 : 17;
   return { start: new Date(date + 'T' + open + ':00:00-05:00'), end: new Date(date + 'T22:00:00-05:00') };
 }
-function availableSlots(date, calendarId) {
+function availableSlots(date, calendarId, busyCalendarIds) {
   const window = dateWindow(date);
-  const response = Calendar.Freebusy.query({ timeMin: window.start.toISOString(), timeMax: window.end.toISOString(), timeZone: TIME_ZONE, items: [{ id: calendarId }] });
-  const calendar = response.calendars && response.calendars[calendarId];
-  if (!calendar || (calendar.errors && calendar.errors.length)) throw new Error('Free/busy calendar unavailable');
-  const busy = calendar.busy || [];
+  const ids = Array.from(new Set([calendarId].concat(busyCalendarIds || [])));
+  const response = Calendar.Freebusy.query({ timeMin: window.start.toISOString(), timeMax: window.end.toISOString(), timeZone: TIME_ZONE, items: ids.map(function (id) { return { id: id }; }) });
+  let busy = [];
+  ids.forEach(function (id) {
+    const calendar = response.calendars && response.calendars[id];
+    if (!calendar || (calendar.errors && calendar.errors.length)) throw new Error('Free/busy calendar unavailable');
+    busy = busy.concat(calendar.busy || []);
+  });
   const slots = [];
   for (let start = window.start.getTime(); start + DURATION_MINUTES * 60000 <= window.end.getTime(); start += 30 * 60000) {
     const end = start + DURATION_MINUTES * 60000;
@@ -118,7 +165,7 @@ function book(data) {
         return resultFor(booking);
       }
     }
-    const slots = availableSlots(booking.date, config.calendarId);
+    const slots = availableSlots(booking.date, config.calendarId, config.busyCalendarIds);
     if (!slots.some(function (slot) { return slot.start === booking.start; })) fail('Ese horario ya no está disponible. Consulta la fecha nuevamente y elige otro.');
     const eventId = 'ea' + digest(booking.requestId);
     if (!rowNumber) {

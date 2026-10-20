@@ -9,7 +9,10 @@ class Clock extends Date {
   constructor(...args) { super(...(args.length ? args : [NOW])); }
   static now() { return NOW; }
 }
-function setup() {
+function setup(initialProps) {
+  const properties = initialProps || { CALENDAR_ID: 'calendar', SPREADSHEET_ID: 'sheet' };
+  const created = { calendars: 0, spreadsheets: 0 };
+  let calendarBusy = {};
   const rows = [];
   const events = [];
   let busy = [];
@@ -29,8 +32,8 @@ function setup() {
     } })
   };
   const context = vm.createContext({
-    Date: Clock, console: { error() {} },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: name => ({ CALENDAR_ID: 'calendar', SPREADSHEET_ID: 'sheet' })[name] }) },
+    Date: Clock, console: { error() {}, log() {} },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: name => properties[name], setProperty: (name, value) => { properties[name] = value; } }) },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: content => ({ setMimeType: () => JSON.parse(content) }) },
     Utilities: {
       DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },
@@ -43,9 +46,10 @@ function setup() {
       }
     },
     LockService: { getScriptLock: () => ({ tryLock: () => lockAvailable, releaseLock: () => { releaseCount++; } }) },
-    SpreadsheetApp: { openById: () => ({ getSheetByName: () => sheet, insertSheet: () => sheet }), flush() {} },
+    SpreadsheetApp: { create: () => { created.spreadsheets++; return { getId: () => 'sheet' }; }, openById: () => ({ getSheetByName: () => sheet, insertSheet: () => sheet, setSpreadsheetTimeZone() {} }), flush() {} },
     Calendar: {
-      Freebusy: { query: () => ({ calendars: { calendar: freebusyError ? { errors: [{ reason: 'notFound' }] } : { busy: [...busy, ...events.map(e => ({ start: e.start.dateTime, end: e.end.dateTime }))] } } }) },
+      Calendars: { get: () => ({ id: 'primary@example.com' }), insert: () => { created.calendars++; return { id: 'calendar' }; } },
+      Freebusy: { query: request => ({ calendars: Object.fromEntries(request.items.map(item => [item.id, freebusyError ? { errors: [{ reason: 'notFound' }] } : { busy: item.id === 'calendar' ? [...busy, ...events.map(e => ({ start: e.start.dateTime, end: e.end.dateTime }))] : (calendarBusy[item.id] || []) }])) }) },
       Events: {
         list: (_, options) => ({ items: events.filter(e => 'requestId=' + e.extendedProperties.private.requestId === options.privateExtendedProperty[0]) }),
         insert(event) {
@@ -57,7 +61,7 @@ function setup() {
     }
   });
   vm.runInContext(source, context);
-  return { context, rows, events, setBusy: value => { busy = value; }, setLock: value => { lockAvailable = value; }, failConfirmation: () => { failConfirmation = true; }, failInsert: value => { insertError = value; }, failFreebusy: () => { freebusyError = true; }, releases: () => releaseCount };
+  return { context, rows, events, created, properties, setCalendarBusy: value => { calendarBusy = value; }, setBusy: value => { busy = value; }, setLock: value => { lockAvailable = value; }, failConfirmation: () => { failConfirmation = true; }, failInsert: value => { insertError = value; }, failFreebusy: () => { freebusyError = true; }, releases: () => releaseCount };
 }
 function data(overrides = {}) {
   return { action: 'book', requestId: 'cd8f3ce0-524f-4ccf-a3b1-123456789abc', name: 'Ana', email: 'ana@example.com', date: '2026-10-21', time: '2026-10-21T22:00:00.000Z', activity: 'Ir al cine', food: 'Makis', location: 'Miraflores, Lima', comments: '', ...overrides };
@@ -187,4 +191,51 @@ test('invalid API requests are rejected', () => {
   assert.equal(context.doGet({ parameter: { action: 'private-data' } }).ok, false);
   assert.equal(context.doPost({ postData: { contents: '{bad' } }).ok, false);
   assert.equal(post(context, { action: 'delete' }).ok, false);
+});
+
+
+test('initializer creates new resources once and includes the principal calendar', () => {
+  const app = setup({});
+  const result = app.context.inicializarAgenda();
+  assert.equal(app.created.calendars, 1);
+  assert.equal(app.created.spreadsheets, 1);
+  assert.equal(app.properties.CALENDAR_ID, 'calendar');
+  assert.equal(app.properties.SPREADSHEET_ID, 'sheet');
+  assert.deepEqual(JSON.parse(app.properties.BUSY_CALENDAR_IDS), ['primary@example.com', 'calendar']);
+  assert.match(result.spreadsheetUrl, /spreadsheets\/d\/sheet/);
+  app.context.inicializarAgenda();
+  assert.equal(app.created.calendars, 1);
+  assert.equal(app.created.spreadsheets, 1);
+  assert.equal(app.rows.length, 1);
+});
+test('initializer preserves existing resources, calendar choices and bookings', () => {
+  const app = setup({ CALENDAR_ID: 'calendar', SPREADSHEET_ID: 'sheet', BUSY_CALENDAR_IDS: '["work@example.com"]' });
+  assert.equal(post(app.context, data()).ok, true);
+  app.context.inicializarAgenda();
+  assert.equal(app.created.calendars, 0);
+  assert.equal(app.created.spreadsheets, 0);
+  assert.equal(app.properties.BUSY_CALENDAR_IDS, '["work@example.com"]');
+  assert.equal(app.rows[1][2], 'CONFIRMADA');
+});
+test('principal calendar commitments block both availability and booking', () => {
+  const app = setup();
+  app.properties.BUSY_CALENDAR_IDS = '["primary@example.com","calendar"]';
+  app.setCalendarBusy({ 'primary@example.com': [{ start: '2026-10-21T22:00:00Z', end: '2026-10-21T23:00:00Z' }] });
+  const response = app.context.doGet({ parameter: { action: 'availability', date: '2026-10-21' } });
+  assert.equal(response.ok, true);
+  assert.ok(!response.slots.some(slot => slot.start === data().time));
+  assert.equal(post(app.context, data()).ok, false);
+  assert.equal(app.events.length, 0);
+});
+test('a missing requested calendar fails closed', () => {
+  const app = setup();
+  app.context.Calendar.Freebusy.query = () => ({ calendars: { calendar: { busy: [] } } });
+  assert.throws(() => app.context.availableSlots('2026-10-21', 'calendar', ['missing']));
+});
+test('public endpoints cannot initialize resources', () => {
+  const app = setup({});
+  assert.equal(app.context.doGet({ parameter: { action: 'inicializarAgenda' } }).ok, false);
+  assert.equal(post(app.context, { action: 'inicializarAgenda' }).ok, false);
+  assert.equal(app.created.calendars, 0);
+  assert.equal(app.created.spreadsheets, 0);
 });
