@@ -19,20 +19,11 @@ function resetTimes(message) {
   submit.disabled = true;
 }
 async function api(action, data) {
-  const url = new URL(config.apiUrl);
-  let options = { redirect: 'follow' };
-  if (action === 'availability') {
-    url.searchParams.set('action', action);
-    url.searchParams.set('date', data.date);
-  } else {
-    options.method = 'POST';
-    options.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
-    options.body = JSON.stringify({ ...data, action });
-  }
-  // Do not abort a booking: a request may still complete at Google after a timeout.
-  const response = await fetch(url, options);
-  if (!response.ok) throw new Error('No pudimos comunicarnos con la agenda. Inténtalo de nuevo.');
-  const result = await response.json();
+  const result = action === 'availability'
+    ? await window.AgendaTransport.availability(config.apiUrl, data.date)
+    : await window.AgendaTransport.book(config.apiUrl, data);
+  if (!result || typeof result.ok !== 'boolean') throw new Error('La agenda devolvió una respuesta inesperada. Avisa a la persona organizadora.');
+  if (result.ok && action === 'availability' && !Array.isArray(result.slots)) throw new Error('No pudimos leer los horarios disponibles.');
   if (!result.ok) throw new Error(result.error || 'No se pudo completar la solicitud.');
   return result;
 }

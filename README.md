@@ -24,7 +24,9 @@ Sin URL en `config.js`, el formulario muestra el aviso de conexión pendiente y 
 6. Copia la URL que termina en `/exec` a `apiUrl` en `config.js`, confirma ese archivo y publícalo. La URL es pública y no debe contener tokens. Al cambiar código de Apps Script, actualiza la implementación a una versión nueva.
 7. Comprueba desde la web publicada que se cargan horarios. Haz una reserva real y verifica un evento en el nuevo calendario y una fila **CONFIRMADA** en la nueva hoja. Bloquea un horario en tu calendario principal y comprueba que desaparezca de la lista. Las reservas de prueba crean datos reales: elimínalos manualmente si corresponde.
 
-La comunicación usa GET para disponibilidad y POST `text/plain` para reservar, sin preflight CORS. Google entrega JSON mediante redirección a `script.googleusercontent.com`. La prueba desde el dominio publicado es obligatoria: políticas de cuenta o restricciones del navegador pueden impedir acceso. No se ha validado esa integración con una cuenta real sin su autorización.
+La disponibilidad usa JSONP con un callback aleatorio y validado. Las reservas se envían por formulario a un iframe oculto; Google devuelve la confirmación mediante `postMessage` al origen fijo `https://atomchat-recursos.github.io`. El cliente verifica el origen de Google y un canal aleatorio por intento antes de aceptar el resultado. Así no depende de permisos CORS en las redirecciones de Apps Script. Si alojas el sitio en otro dominio, actualiza el origen de destino en `doPost` y vuelve a desplegar. Nunca uses un proxy CORS público para enviar datos personales. Tras cambiar `Code.gs`, actualiza la implementación a **Nueva versión** manteniendo la URL `/exec`.
+
+La prueba desde el dominio publicado sigue siendo obligatoria. Un resultado JSON correcto al abrir `/exec?action=availability&date=...` prueba el servicio, pero no prueba la comunicación desde la web ni la creación de reservas.
 
 ## Publicar en GitHub
 

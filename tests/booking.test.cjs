@@ -34,7 +34,8 @@ function setup(initialProps) {
   const context = vm.createContext({
     Date: Clock, console: { error() {}, log() {} },
     PropertiesService: { getScriptProperties: () => ({ getProperty: name => properties[name], setProperty: (name, value) => { properties[name] = value; } }) },
-    ContentService: { MimeType: { JSON: 'json' }, createTextOutput: content => ({ setMimeType: () => JSON.parse(content) }) },
+    ContentService: { MimeType: { JSON: 'json', JAVASCRIPT: 'javascript' }, createTextOutput: content => ({ setMimeType: type => type === 'javascript' ? content : JSON.parse(content) }) },
+    HtmlService: { XFrameOptionsMode: { ALLOWALL: 'ALLOWALL' }, createHtmlOutput: html => ({ setXFrameOptionsMode: mode => ({ html, mode }) }) },
     Utilities: {
       DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },
       computeDigest: (_, value) => [...crypto.createHash('sha256').update(value).digest()],
@@ -238,4 +239,49 @@ test('public endpoints cannot initialize resources', () => {
   assert.equal(post(app.context, { action: 'inicializarAgenda' }).ok, false);
   assert.equal(app.created.calendars, 0);
   assert.equal(app.created.spreadsheets, 0);
+});
+
+
+test('JSONP returns availability through a constrained callback', () => {
+  const app = setup();
+  const callback = 'agenda_' + 'a'.repeat(32);
+  const script = app.context.doGet({ parameter: { action: 'availability', date: '2026-10-24', callback } });
+  let result;
+  vm.runInNewContext(script, { [callback]: value => { result = value; } });
+  assert.equal(result.ok, true);
+  assert.equal(result.slots.length, 23);
+});
+test('JSONP rejects executable callback names', () => {
+  const app = setup();
+  for (const callback of ['alert(1)//', 'window.location', 'agenda_bad', 'x;evil']) {
+    assert.equal(app.context.doGet({ parameter: { action: 'availability', date: '2026-10-24', callback } }).ok, false);
+  }
+});
+test('form booking returns a message only to the production origin with its channel', () => {
+  const app = setup();
+  const channel = 'b'.repeat(32);
+  const output = app.context.doPost({ parameter: { payload: JSON.stringify(data()), channel } });
+  assert.equal(output.mode, 'ALLOWALL');
+  const script = output.html.match(/<script>([\s\S]*)<\/script>/)[1];
+  let message, origin;
+  vm.runInNewContext(script, { window: { top: { postMessage: (value, target) => { message = value; origin = target; } } } });
+  assert.equal(message.result.ok, true);
+  assert.equal(message.channel, channel);
+  assert.equal(origin, 'https://atomchat-recursos.github.io');
+  assert.equal(app.rows[1][2], 'CONFIRMADA');
+});
+test('form response escapes user text that could close its script tag', () => {
+  const app = setup();
+  const location = '</script><script>alert(1)</script>';
+  const output = app.context.doPost({ parameter: { payload: JSON.stringify(data({ location })), channel: 'c'.repeat(32) } });
+  assert.equal((output.html.match(/<script>/g) || []).length, 1);
+  const script = output.html.match(/<script>([\s\S]*)<\/script>/)[1];
+  let message;
+  vm.runInNewContext(script, { window: { top: { postMessage: value => { message = value; } } } });
+  assert.equal(message.result.location, location);
+});
+test('invalid form channels never create a reservation', () => {
+  const app = setup();
+  assert.equal(app.context.doPost({ parameter: { payload: JSON.stringify(data()), channel: '<script>' } }).ok, false);
+  assert.equal(app.events.length, 0);
 });

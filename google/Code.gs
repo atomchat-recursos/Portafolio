@@ -56,29 +56,44 @@ function settings() {
   return { calendarId: calendarId, spreadsheetId: spreadsheetId, busyCalendarIds: Array.from(new Set([calendarId].concat(busyIds))) };
 }
 function json(value) { return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON); }
-function respond(fn) {
-  try { return json(Object.assign({ ok: true }, fn())); }
+function fail(message) { const error = new Error(message); error.publicMessage = message; throw error; }
+// JSONP reads and an HTML form response avoid fetch/CORS across Google redirects.
+function outcome_(fn) {
+  try { return Object.assign({ ok: true }, fn()); }
   catch (error) {
     console.error(error.stack || error.message);
-    return json({ ok: false, error: error.publicMessage || 'No se pudo completar la solicitud. Reintenta en unos momentos o contacta a la persona organizadora.' });
+    return { ok: false, error: error.publicMessage || 'No se pudo completar la solicitud. Reintenta en unos momentos o contacta a la persona organizadora.' };
   }
 }
-function fail(message) { const error = new Error(message); error.publicMessage = message; throw error; }
 function doGet(e) {
-  return respond(function () {
-    if (!e || e.parameter.action !== 'availability') fail('Solicitud no válida.');
+  const params = e && e.parameter || {};
+  const callback = params.callback;
+  if (callback && !/^agenda_[a-f0-9]{32}$/.test(callback)) return json({ ok: false, error: 'Solicitud no válida.' });
+  const result = outcome_(function () {
+    if (params.action !== 'availability') fail('Solicitud no válida.');
     const config = settings();
-    return { slots: availableSlots(e.parameter.date, config.calendarId, config.busyCalendarIds) };
+    return { slots: availableSlots(params.date, config.calendarId, config.busyCalendarIds) };
   });
+  if (!callback) return json(result);
+  return ContentService.createTextOutput(callback + '(' + JSON.stringify(result) + ');').setMimeType(ContentService.MimeType.JAVASCRIPT);
 }
 function doPost(e) {
-  return respond(function () {
-    if (!e || !e.postData || e.postData.contents.length > 12000) fail('Solicitud no válida.');
+  const params = e && e.parameter || {};
+  const formRequest = typeof params.payload === 'string';
+  const channel = params.channel;
+  if (formRequest && (typeof channel !== 'string' || !/^[a-f0-9]{32}$/.test(channel))) return json({ ok: false, error: 'Solicitud no válida.' });
+  const result = outcome_(function () {
+    const body = formRequest ? params.payload : e && e.postData && e.postData.contents;
+    if (typeof body !== 'string' || body.length > 12000) fail('Solicitud no válida.');
     let data;
-    try { data = JSON.parse(e.postData.contents); } catch (_) { fail('Solicitud no válida.'); }
+    try { data = JSON.parse(body); } catch (_) { fail('Solicitud no válida.'); }
     if (!data || data.action !== 'book') fail('Solicitud no válida.');
     return book(data);
   });
+  if (!formRequest) return json(result);
+  // Escape user-controlled strings before placing JSON inside an HTML script.
+  const message = JSON.stringify({ type: 'agenda-result', channel: channel, result: result }).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+  return HtmlService.createHtmlOutput('<!doctype html><meta charset="utf-8"><script>window.top.postMessage(' + message + ', "https://atomchat-recursos.github.io");</script>').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 function dateWindow(date) {
   if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) fail('Elige una fecha válida.');
