@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#263e35">
+  <meta name="description" content="Un espacio para hacer planes, compartir algo rico y encontrarnos entre amigos.">
+  <title>Entre amigos · Hagamos un plan</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js" defer></script><script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="./"><span class="brand-icon">✳</span> entre amigos<span class="brand-dot">.</span></a><span class="top-note">Menos «hay que vernos». Más vernos.</span></header>
+  <main>
+    <aside class="intro">
+      <div class="eyebrow"><span></span> UN BUEN PLAN EMPIEZA AQUÍ</div>
+      <h1>Hagamos<br>un espacio<br>para <em>vernos.</em></h1>
+      <p>Elige un día, trae una idea y pongámosle fecha a esa conversación pendiente.</p>
+      <div class="illustration" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><span class="spark">✷</span><div class="ticket"><span>PRÓXIMO PLAN</span><strong>Tú + yo</strong><div>Buena compañía incluida ↗</div></div><div class="coffee">☕</div><span class="little-star">✳</span></div>
+      <div class="hours"><span class="clock">◷</span><div><strong>Siempre hay un momento</strong><p>Lun–vie · 5:00 p. m. a 10:00 p. m.<br>Sáb–dom · 10:00 a. m. a 10:00 p. m.</p><small>Citas de 1 hora · Hora de Lima (UTC−5)</small></div></div>
+    </aside>
+    <section class="form-card" aria-labelledby="form-title">
+      <div class="card-top"><span class="step-tag">TU PRÓXIMO ENCUENTRO</span><span class="step-number">01 / 01</span></div>
+      <h2 id="form-title">De la idea al calendario.</h2><p class="subheading">Unos detalles y ya tenemos plan.</p>
+      <div id="setup-notice" class="notice" hidden>La agenda todavía no está conectada a Google. Podrás explorar el formulario; los horarios y las reservas estarán disponibles cuando se active la conexión.</div>
+      <form id="booking-form">
+        <div class="section-label"><span>01</span> ¿Quién se apunta?</div>
+        <div class="two-columns"><label>Tu nombre <span class="required">*</span><input name="name" placeholder="¿Cómo te llamas?" autocomplete="name" required maxlength="100"></label><label>Tu correo <span class="required">*</span><input name="email" type="email" placeholder="hola@ejemplo.com" autocomplete="email" required maxlength="254"></label></div>
+        <div class="section-label"><span>02</span> Encontremos el momento</div>
+        <div class="two-columns"><label>Fecha <span class="required">*</span><input id="date" name="date" type="date" required></label><label>Hora disponible <span class="required">*</span><select id="time" name="time" required disabled><option value="">Elige primero una fecha</option></select></label></div>
+        <p class="field-note" id="availability-status" role="status" aria-live="polite">Solo aparecerán horarios libres en el calendario.</p>
+        <div class="section-label"><span>03</span> Dale forma al plan</div>
+        <fieldset><legend>¿Qué te gustaría hacer? <span class="required">*</span></legend><div class="choice-grid" id="activities">
+          <label class="choice"><input type="radio" name="activity" value="Conversar y tomar café" required><span>☕ Café y charla</span></label>
+          <label class="choice"><input type="radio" name="activity" value="Salir a comer"><span>🍽 Salir a comer</span></label>
+          <label class="choice"><input type="radio" name="activity" value="Ir al cine"><span>🎬 Ir al cine</span></label>
+          <label class="choice"><input type="radio" name="activity" value="Pasear al aire libre"><span>🌿 Dar un paseo</span></label>
+          <label class="choice"><input type="radio" name="activity" value="Juegos de mesa"><span>🎲 Juegos de mesa</span></label>
+          <label class="choice"><input type="radio" name="activity" value="Otra"><span>＋ Otro plan</span></label>
+        </div></fieldset>
+        <label id="custom-activity-label" hidden>Cuéntanos tu idea <input name="customActivity" maxlength="200" placeholder="Ese plan que tienes en mente…"></label>
+        <label class="spaced">Lugar del encuentro <span class="required">*</span><input name="location" required maxlength="300" placeholder="Nombre del lugar y dirección"></label>
+        <fieldset class="spaced"><legend>¿Qué se te antoja? <span class="required">*</span></legend><div class="food-grid">
+          <label class="choice"><input type="radio" name="food" value="Hamburguesas" required><span>🍔 Hamburguesas</span></label>
+          <label class="choice"><input type="radio" name="food" value="Pizzas"><span>🍕 Pizzas</span></label>
+          <label class="choice"><input type="radio" name="food" value="Sopas"><span>🍜 Sopas</span></label>
+          <label class="choice"><input type="radio" name="food" value="Makis"><span>🍣 Makis</span></label>
+          <label class="choice"><input type="radio" name="food" value="Otra"><span>＋ Otra opción</span></label>
+        </div></fieldset>
+        <label id="custom-food-label" hidden>¿Qué comida prefieres?<input name="customFood" maxlength="200" placeholder="Algo rico para compartir…"></label>
+        <label class="spaced">Comentarios y sugerencias <span class="optional">Opcional</span><textarea name="comments" rows="3" maxlength="1500" placeholder="Alergias, ideas, algo que deba saber…"></textarea></label>
+        <p class="privacy">Al reservar, tu nombre, correo y los detalles del plan se guardarán en el calendario y la hoja privada de la persona organizadora.</p>
+        <button class="submit" id="submit" type="submit" disabled>¡Listo, hagamos el plan! <span>↗</span></button>
+        <p id="form-status" role="status" aria-live="polite"></p>
+        <div class="card-footer"><span>◈</span> Un plan, una hora, buena compañía.</div>
+      </form>
+      <section id="success" hidden tabindex="-1"><div class="success-icon">✓</div><h2>¡Tenemos un plan!</h2><p id="success-details"></p><p>Tu encuentro quedó reservado en el calendario y registrado en la hoja de la persona organizadora.</p><button type="button" class="submit" id="another">Organizar otro encuentro ↗</button></section>
+    </section>
+  </main>
+  <footer>Hecho para compartir tiempo de verdad.<span>entre amigos © 2026</span></footer>
+</body>
+</html>
